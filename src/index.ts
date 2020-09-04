@@ -1,6 +1,7 @@
 import log4js from "log4js";
 import serverWatchdog from "@randlabs/server-watchdog-nodejs";
 import path from "path";
+import process from "process";
 
 // -----------------------------------------------------------------------------
 
@@ -8,14 +9,17 @@ export type level = "error" | "info" | "warn" | "debug";
 
 export interface Options {
 	appName: string;
-	dir: string;
-	serverWatchdog: {
-		host: string;
-		port: number;
-		apiKey: string;
-		defaultChannel: string;
-		timeout: number;
-	};
+	dir?: string;
+	daysToKeep?: number;
+	serverWatchdog?: ServerWatchdogOptions;
+}
+
+export interface ServerWatchdogOptions {
+	host: string;
+	port: number;
+	apiKey: string;
+	defaultChannel: string;
+	timeout?: number;
 }
 
 // -----------------------------------------------------------------------------
@@ -34,9 +38,38 @@ const swProcessRegister: {
 // -----------------------------------------------------------------------------
 
 export async function initialize(options: Options): Promise<void> {
+	let logDir: string;
+
 	if (!options) {
-		throw new Error("Options not set");
+		throw new Error("Logger: Options not set");
 	}
+
+	if (!options.appName || typeof options.appName !== "string") {
+		throw new Error("Logger: Application name not set or invalid.");
+	}
+
+	if (typeof options.dir === "string") {
+		logDir = options.dir;
+	}
+	else if (!options.dir) {
+		logDir = "";
+		if (process.platform == 'win32') {
+			logDir = process.env.APPDATA + path.sep + appName + '\\logs';
+		}
+		else if (process.platform == 'darwin') {
+			logDir = process.env.HOME + '/Library/Logs/' + appName;
+		}
+		else {
+			logDir = process.env.HOME + "/." + appName + "/logs";
+		}
+	}
+	else {
+		throw new Error("Logger: Invalid log directory.");
+	}
+	if (!logDir.endsWith(path.sep)) {
+		logDir += path.sep;
+	}
+	logDir = path.normalize(logDir);
 
 	//create the local logger
 	log4js.configure({
@@ -51,14 +84,14 @@ export async function initialize(options: Options): Promise<void> {
 			},
 			everything: {
 				type: "dateFile",
-				filename: path.resolve(options.dir, options.appName + ".log"),
+				filename: path.resolve(logDir, options.appName + ".log"),
 				layout: {
 					type: "pattern",
 					pattern: "[%d{yyyy-MM-dd hh:mm:ss}] [%p] - %m"
 				},
 				level: "all",
 				keepFileExt: true,
-				daysToKeep: 7,
+				daysToKeep: options.daysToKeep ? options.daysToKeep : 7,
 				alwaysIncludePattern: true
 			}
 		},
@@ -84,8 +117,27 @@ export async function initialize(options: Options): Promise<void> {
 		await registerProcess();
 		swProcessRegister.timer = setInterval(registerProcess, 30000);
 	}
+}
 
-	process.on('beforeExit', shutdown);
+export async function finalize(): Promise<void> {
+	if (swProcessRegister.timer !== null) {
+		clearTimeout(swProcessRegister.timer);
+
+		swProcessRegister.timer = null;
+	}
+	swProcessRegister.lastSucceeded = true;
+
+	if (swClient) {
+		try {
+			await swClient.processUnwatch(process.pid);
+		}
+		catch (err) {
+			// keep linter happy
+		}
+		swClient = null;
+	}
+
+	appName = "";
 }
 
 export function notify(type: level, message: string): void {
@@ -150,23 +202,4 @@ async function registerProcess(): Promise<void> {
 			swProcessRegister.lastSucceeded = false;
 		}
 	}
-}
-
-async function shutdown(): Promise<void> {
-	if (swProcessRegister.timer !== null) {
-		clearTimeout(swProcessRegister.timer);
-	}
-	swProcessRegister.lastSucceeded = true;
-
-	if (swClient) {
-		try {
-			await swClient.processUnwatch(process.pid);
-		}
-		catch (err) {
-			// keep linter happy
-		}
-		swClient = null;
-	}
-
-	appName = "";
 }
