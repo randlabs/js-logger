@@ -2,13 +2,11 @@
 	"name": "@randlabs/js-logger",
 	"version": "1.0.0",
 	"description": "Common logger for RandLabs apps",
-	"main": "dist/index.js",
-	"types": "dist/index.d.ts",
+	"main": "lib/index.js",
+	"types": "lib/index.d.ts",
 	"scripts": {
-		"build": "tsc",
-		"clean": "rimraf dist",
-		"rebuild": "npm run clean && npm run build",
-		"prepack": "npm run rebuild"
+		"build": "rimraf lib && tsc",
+		"prepack": "npm run build"
 	},
 	"repository": {
 		"type": "git",
@@ -33,11 +31,11 @@
 		"log4js": "^6.3.0"
 	},
 	"devDependencies": {
-		"@types/node": "^14.0.26",
-		"@typescript-eslint/eslint-plugin": "^3.7.1",
-		"@typescript-eslint/parser": "^3.7.1",
-		"eslint": "^7.5.0",
+		"@types/node": "^14.6.4",
+		"@typescript-eslint/eslint-plugin": "^3.10.1",
+		"@typescript-eslint/parser": "^3.10.1",
+		"eslint": "^7.8.1",
 		"rimraf": "^3.0.2",
-		"typescript": "^3.9.7"
+		"typescript": "^4.0.2"
 	}
 }
