@@ -1,4 +1,4 @@
-import log4js from "log4js";
+import log4js, { Logger } from "log4js";
 import serverWatchdog from "@randlabs/server-watchdog-nodejs";
 import path from "path";
 import process from "process";
@@ -12,6 +12,7 @@ export interface Options {
 	dir?: string;
 	daysToKeep?: number;
 	serverWatchdog?: ServerWatchdogOptions;
+	debugLevel?: number;
 }
 
 export interface ServerWatchdogOptions {
@@ -34,6 +35,7 @@ const swProcessRegister: {
 	timer: null,
 	lastSucceeded: false
 };
+let debugLevel = 0;
 
 // -----------------------------------------------------------------------------
 
@@ -70,6 +72,10 @@ export async function initialize(options: Options): Promise<void> {
 		logDir += path.sep;
 	}
 	logDir = path.normalize(logDir);
+
+	if (typeof options.debugLevel === "number" && options.debugLevel >= 0) {
+		debugLevel = options.debugLevel;
+	}
 
 	//create the local logger
 	log4js.configure({
@@ -140,6 +146,12 @@ export async function finalize(): Promise<void> {
 	appName = "";
 }
 
+export function setDebugLevel(newLevel: number): void {
+	if (newLevel >= 0) {
+		debugLevel = newLevel;
+	}
+}
+
 export function notify(type: level, message: string): void {
 	if (type == "error") {
 		if (logger) {
@@ -185,6 +197,24 @@ export function notify(type: level, message: string): void {
 		else {
 			console.log("[DEBUG] " + message);
 		}
+	}
+}
+
+export function error(message: string): void {
+	notify("error", message);
+}
+
+export function warn(message: string): void {
+	notify("warn", message);
+}
+
+export function info(message: string): void {
+	notify("info", message);
+}
+
+export function debug(level: number, message: string): void {
+	if (level > 0 && level <= debugLevel) {
+		notify("debug", message);
 	}
 }
 
