@@ -29,7 +29,7 @@ let swClient: any = null;
 let logger: log4js.Logger;
 let appName = "";
 const swProcessRegister: {
-	timer: NodeJS.Timeout|null;
+	timer: NodeJS.Timeout | null;
 	lastSucceeded: boolean;
 } = {
 	timer: null,
@@ -163,7 +163,9 @@ export function notify(type: level, message: string): void {
 
 		if (swClient) {
 			swClient.error(message).catch(() => {
-				logger.error("Unable to deliver message to Server Watcher");
+				if (logger) {
+					logger.error("Unable to deliver message to Server Watcher");
+				}
 			});
 		}
 	}
@@ -186,7 +188,9 @@ export function notify(type: level, message: string): void {
 
 		if (swClient) {
 			swClient.warn(message).catch(() => {
-				logger.error("Unable to deliver message to Server Watcher");
+				if (logger) {
+					logger.error("Unable to deliver message to Server Watcher");
+				}
 			});
 		}
 	}
