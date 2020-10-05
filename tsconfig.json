@@ -1,0 +1,36 @@
+{
+	"compilerOptions": {
+		"alwaysStrict": true,
+		"declaration": true,
+		"declarationMap": true,
+		"emitDecoratorMetadata": true,
+		"experimentalDecorators": true,
+		"forceConsistentCasingInFileNames": true,
+		"inlineSourceMap": false,
+		"inlineSources": true,
+		"esModuleInterop": true,
+		"baseUrl": ".",
+		"target": "es2018",
+		"module": "CommonJS",
+		"moduleResolution": "node",
+		"sourceMap": true,
+		"strict": true,
+		"importHelpers": false,
+		"noEmitHelpers": false,
+		"noEmitOnError": true,
+		"resolveJsonModule": true,
+		"removeComments": true,
+		"newLine": "LF",
+		"outDir": "lib",
+		"types": ["node"],
+	},
+	"include": [
+		"src/**/*.ts"
+	],
+	"exclude": [
+		"lib",
+		"node_modules",
+		"test",
+		"**/*.spec.ts"
+	]
+}

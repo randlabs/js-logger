@@ -1,0 +1,9 @@
+*.~*
+*.tgz
+.eslintignore
+.eslintrc.js
+.gitattributes
+.npmignore
+.vscode
+test
+tsconfig.json
