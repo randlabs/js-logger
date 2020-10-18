@@ -4,5 +4,5 @@
 .eslintcache
 .node_repl_history
 package-lock.json
-lib/
+dist/
 node_modules/
