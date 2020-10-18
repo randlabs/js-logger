@@ -48,11 +48,11 @@ let debugLevel = 0;
 // -----------------------------------------------------------------------------
 
 export function initialize(options: Options): void {
-	if (!options) {
+	if (typeof options !== "object" || Array.isArray(options)) {
 		throw new Error("Logger: Options not set");
 	}
 
-	if (!options.appName || typeof options.appName !== "string") {
+	if ((!options.appName) || typeof options.appName !== "string") {
 		throw new Error("Logger: Application name not set or invalid.");
 	}
 
