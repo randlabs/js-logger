@@ -10,7 +10,7 @@ module.exports = {
 	},
 	"overrides": [
 		{
-			"files": ["**/*.ts"],
+			"files": [ "**/*.ts" ],
 			"extends": [
 				"eslint:recommended",
 				"plugin:@typescript-eslint/eslint-recommended",
@@ -36,12 +36,7 @@ module.exports = {
 				],
 				"@typescript-eslint/no-extra-semi": [ "error" ],
 				"@typescript-eslint/no-non-null-assertion": "off",
-				"@typescript-eslint/no-use-before-define": [
-					"error",
-					{
-						"functions": false
-					}
-				],
+				"@typescript-eslint/no-use-before-define": "off",
 				"@typescript-eslint/typedef": "off",
 				"@typescript-eslint/one-line": "off",
 				"@typescript-eslint/explicit-module-boundary-types": [
@@ -95,7 +90,7 @@ module.exports = {
 			"stroustrup"
 		],
 		"callback-return": "error",
-		"camelcase": [ "error", { "allow": [ "last_teal_index", "next_teal_round", "local_index", "accounts_teals", "dis_teal" ] } ],
+		"camelcase": [ "error", { "allow": [ "app_name" ] } ],
 		"capitalized-comments": "off",
 		"class-methods-use-this": "off",
 		"comma-dangle": "off",
@@ -203,7 +198,7 @@ module.exports = {
 		"no-duplicate-imports": "off",
 		"no-else-return": "error",
 		"no-empty-function": "error",
-		"no-eq-null": "error",
+		"no-eq-null": "off",
 		"no-eval": "error",
 		"no-extend-native": "error",
 		"no-extra-bind": "error",
