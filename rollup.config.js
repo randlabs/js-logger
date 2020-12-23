@@ -15,14 +15,16 @@ export default [
 			sourcemap: true,
 			exports: "auto"
 		},
-		external: [ "process", "path", "util", "log4js", "syslog-client" ],
+		external: [
+			"process", "path", "util", "fs", "os", "winston", "winston-transport", "winston-daily-rotate-file", "winston-syslog", "colors"
+		],
 		plugins: [
 			json(),
 			ts({
 				tsconfig: "./tsconfig.json"
 			}),
-			commonjs(),
 			resolve(),
+			commonjs(),
 			terser({
 				ecma: 2015
 			})
