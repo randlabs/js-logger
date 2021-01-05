@@ -129,10 +129,7 @@ module.exports = {
 		"func-call-spacing": "error",
 		"func-name-matching": "error",
 		"func-names": "off",
-		"func-style": [
-			"error",
-			"declaration"
-		],
+		"func-style": "off",
 		"function-paren-newline": "error",
 		"generator-star-spacing": "error",
 		"global-require": "error",
@@ -210,6 +207,7 @@ module.exports = {
 		"no-implicit-globals": "error",
 		"no-implied-eval": "error",
 		"no-inline-comments": "off",
+		"no-inner-declarations": "off",
 		"no-invalid-this": "error",
 		"no-iterator": "error",
 		"no-label-var": "error",
