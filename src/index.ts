@@ -269,39 +269,44 @@ export function finalize(): Promise<void> {
 		if (logger) {
 			const promises = [];
 
+			const done = function(): void {
+				logger = null;
+				consoleTransport = null;
+				fileTransport = null;
+				syslogTransport = null;
+
+				process.nextTick(() => {
+					resolve();
+				});
+			};
+
 			//wait for active transports to flush messages and close
-			if (fileTransport) {
-				promises.push(new Promise<void>((doneResolve: () => void) => {
+			if (fileTransport && (fileTransport as any).logStream) {
+				promises.push(new Promise<void>((onCompletion: () => void) => {
 					fileTransport!.on('finish', function () {
-						doneResolve();
+						onCompletion();
 					});
 				}));
 			}
 
 			if (syslogTransport) {
-				promises.push(new Promise<void>((doneResolve: () => void) => {
+				promises.push(new Promise<void>((onCompletion: () => void) => {
 					syslogTransport!.on('closed', function () {
-						doneResolve();
+						onCompletion();
 					});
 				}));
 			}
 
 			if (promises.length > 0) {
 				Promise.allSettled(promises).then(() => {
-					resolve();
+					done();
 				});
 			}
 
-			logger.end();
 			logger.close();
-			logger = null;
-
-			consoleTransport = null;
-			fileTransport = null;
-			syslogTransport = null;
 
 			if (promises.length == 0) {
-				resolve();
+				done();
 			}
 		}
 		else {
