@@ -6,6 +6,11 @@ import * as winston from "winston";
 import WinstonDailyRotateFile from "winston-daily-rotate-file";
 import WinstonSyslog from "winston-syslog";
 import * as Transport from 'winston-transport';
+import { ClusterModule, loadCluster, Worker } from "./dynamicImport";
+
+// -----------------------------------------------------------------------------
+
+const LOG_REQUEST = "RANDLABS:JS:LOGGER:log";
 
 // -----------------------------------------------------------------------------
 
@@ -17,6 +22,7 @@ export interface Options {
 	fileLog?: FileLogOptions;
 	sysLog?: SysLogOptions;
 	debugLevel?: number;
+	usingClusters?: boolean;
 }
 
 export interface FileLogOptions {
@@ -49,12 +55,14 @@ let consoleTransport: Transport | null = null;
 let fileTransport: Transport | null = null;
 let syslogTransport: Transport | null = null;
 let syslogSendInfoNotifications = false;
+let cluster: ClusterModule | null = null;
+let actingAsWorker = false;
 
 // -----------------------------------------------------------------------------
 
 export function initialize(options: Options): Promise<void> {
-	//NOTE: currently we don't have asynchronous function calls but code is enclosed in a promise
-	//      to maintain future compatibility if underlying engine is changed
+	// NOTE: Currently we don't have asynchronous function calls but code is enclosed in a promise
+	//       to maintain future compatibility if underlying engine is changed
 	return new Promise((resolve, reject) => {
 		let fileLogDir: string;
 		const transports: Transport[] = [];
@@ -73,190 +81,211 @@ export function initialize(options: Options): Promise<void> {
 			debugLevel = options.debugLevel;
 		}
 
-		//create console transport
-		if (!(options.disableConsoleLog)) {
-			consoleTransport = new winston.transports.Console({
-				format: winston.format.combine(
-					winston.format.timestamp({
-						format: "YYYY-MM-DD HH:mm:ss"
-					}),
-					colorizeLevel(),
-					formattedOutputWithDate,
-				)
-			});
-			transports.push(consoleTransport);
+		if (options.usingClusters) {
+			cluster = loadCluster();
 		}
 
-		//create daily rotation file transport
-		if (options.fileLog) {
-			if (typeof options.fileLog !== "object" || Array.isArray(options.fileLog)) {
-				reject(new Error("Logger: Invalid file logger options."));
-				return;
+		if ((!cluster) || cluster.isMaster) {
+			// Master or single instance
+
+			// Create console transport
+			if (!(options.disableConsoleLog)) {
+				consoleTransport = new winston.transports.Console({
+					format: winston.format.combine(
+						winston.format.timestamp({
+							format: "YYYY-MM-DD HH:mm:ss"
+						}),
+						colorizeLevel(),
+						formattedOutputWithDate,
+					)
+				});
+				transports.push(consoleTransport);
 			}
 
-			if (typeof options.fileLog.dir === "string") {
-				fileLogDir = options.fileLog.dir;
-			}
-			else if (!options.fileLog.dir) {
-				fileLogDir = "";
-				if (process.platform == 'win32') {
-					fileLogDir = process.env.APPDATA + path.sep + options.appName + '\\logs';
-				}
-				else if (process.platform == 'darwin') {
-					fileLogDir = process.env.HOME + '/Library/Logs/' + options.appName;
-				}
-				else {
-					fileLogDir = process.env.HOME + "/." + options.appName + "/logs";
-				}
-			}
-			else {
-				reject(new Error("Logger: Invalid log directory."));
-				return;
-			}
-			if (!fileLogDir.endsWith(path.sep)) {
-				fileLogDir += path.sep;
-			}
-			fileLogDir = path.normalize(fileLogDir);
-
-			if (options.fileLog.daysToKeep) {
-				if (typeof options.fileLog.daysToKeep !== "number" || (options.fileLog.daysToKeep % 1) != 0 ||
-						options.fileLog.daysToKeep < 0 || options.fileLog.daysToKeep > 30) {
-					reject(new Error("Logger: Invalid days to keep value."));
+			// Create daily rotation file transport
+			if (options.fileLog) {
+				if (typeof options.fileLog !== "object" || Array.isArray(options.fileLog)) {
+					reject(new Error("Logger: Invalid file logger options."));
 					return;
 				}
-			}
 
-			fileTransport = new WinstonDailyRotateFile({
-				level: "debug",
-				filename: options.appName + ".%DATE%",
-				extension: ".log",
-				dirname: fileLogDir,
-				datePattern: 'YYYY-MM-DD',
-				utc: true,
-				json: false,
-				auditFile: fileLogDir + options.appName + ".audit.log",
-				maxFiles: options.fileLog.daysToKeep ? options.fileLog.daysToKeep.toString() + 'd' : '7d',
-				format: winston.format.combine(
-					winston.format.timestamp({
-						format: "YYYY-MM-DD HH:mm:ss"
-					}),
-					formattedOutputWithDate
-				),
-			});
-			transports.push(fileTransport);
-		}
-
-		//create syslog transport
-		if (options.sysLog) {
-			if (typeof options.sysLog !== "object" || Array.isArray(options.sysLog)) {
-				reject(new Error("Logger: Invalid syslog logger options."));
-				return;
-			}
-
-			let port = 514;
-			let protocol = "udp";
-			if (typeof options.sysLog.transport === "string") {
-				switch (options.sysLog.transport.toLowerCase()) {
-					case "udp":
-						break;
-
-					case "tcp":
-						protocol = "tcp";
-						port = 1468;
-						break;
-
-					case "tls":
-						protocol = "tls";
-						port = 6514;
-						break;
-
-					default:
-						reject(new Error("Logger: Invalid syslog transport option."));
-						return;
+				if (typeof options.fileLog.dir === "string") {
+					fileLogDir = options.fileLog.dir;
 				}
-			}
-			else if (typeof options.sysLog.transport !== null) {
-				reject(new Error("Logger: Invalid syslog transport option."));
-				return;
+				else if (!options.fileLog.dir) {
+					fileLogDir = "";
+					if (process.platform == 'win32') {
+						fileLogDir = process.env.APPDATA + path.sep + options.appName + '\\logs';
+					}
+					else if (process.platform == 'darwin') {
+						fileLogDir = process.env.HOME + '/Library/Logs/' + options.appName;
+					}
+					else {
+						fileLogDir = process.env.HOME + "/." + options.appName + "/logs";
+					}
+				}
+				else {
+					reject(new Error("Logger: Invalid log directory."));
+					return;
+				}
+				if (!fileLogDir.endsWith(path.sep)) {
+					fileLogDir += path.sep;
+				}
+				fileLogDir = path.normalize(fileLogDir);
+
+				if (options.fileLog.daysToKeep) {
+					if (typeof options.fileLog.daysToKeep !== "number" || (options.fileLog.daysToKeep % 1) != 0 ||
+							options.fileLog.daysToKeep < 0 || options.fileLog.daysToKeep > 30) {
+						reject(new Error("Logger: Invalid days to keep value."));
+						return;
+					}
+				}
+
+				fileTransport = new WinstonDailyRotateFile({
+					level: "debug",
+					filename: options.appName + ".%DATE%",
+					extension: ".log",
+					dirname: fileLogDir,
+					datePattern: 'YYYY-MM-DD',
+					utc: true,
+					json: false,
+					auditFile: fileLogDir + options.appName + ".audit.log",
+					maxFiles: options.fileLog.daysToKeep ? options.fileLog.daysToKeep.toString() + 'd' : '7d',
+					format: winston.format.combine(
+						winston.format.timestamp({
+							format: "YYYY-MM-DD HH:mm:ss"
+						}),
+						formattedOutputWithDate
+					),
+				});
+				transports.push(fileTransport);
 			}
 
-			let host = "127.0.0.1";
-			if (typeof options.sysLog.host === "string") {
-				if (options.sysLog.host.length == 0) {
+			// Create syslog transport
+			if (options.sysLog) {
+				if (typeof options.sysLog !== "object" || Array.isArray(options.sysLog)) {
+					reject(new Error("Logger: Invalid syslog logger options."));
+					return;
+				}
+
+				let port = 514;
+				let protocol = "udp";
+				if (typeof options.sysLog.transport === "string") {
+					switch (options.sysLog.transport.toLowerCase()) {
+						case "udp":
+							break;
+
+						case "tcp":
+							protocol = "tcp";
+							port = 1468;
+							break;
+
+						case "tls":
+							protocol = "tls";
+							port = 6514;
+							break;
+
+						default:
+							reject(new Error("Logger: Invalid syslog transport option."));
+							return;
+					}
+				}
+				else if (typeof options.sysLog.transport !== null) {
+					reject(new Error("Logger: Invalid syslog transport option."));
+					return;
+				}
+
+				let host = "127.0.0.1";
+				if (typeof options.sysLog.host === "string") {
+					if (options.sysLog.host.length == 0) {
+						reject(new Error("Logger: Invalid syslog host option."));
+						return;
+					}
+					host = options.sysLog.host;
+				}
+				else if (typeof options.sysLog.host != null) {
 					reject(new Error("Logger: Invalid syslog host option."));
 					return;
 				}
-				host = options.sysLog.host;
-			}
-			else if (typeof options.sysLog.host != null) {
-				reject(new Error("Logger: Invalid syslog host option."));
-				return;
-			}
 
-			if (typeof options.sysLog.port === "number") {
-				if ((options.sysLog.port % 1) != 0 || options.sysLog.port < 0 || options.sysLog.port > 65535) {
+				if (typeof options.sysLog.port === "number") {
+					if ((options.sysLog.port % 1) != 0 || options.sysLog.port < 0 || options.sysLog.port > 65535) {
+						reject(new Error("Logger: Invalid syslog port option."));
+						return;
+					}
+					if (options.sysLog.port != 0) {
+						port = options.sysLog.port;
+					}
+				}
+				else if (options.sysLog.port != null) {
 					reject(new Error("Logger: Invalid syslog port option."));
 					return;
 				}
-				if (options.sysLog.port != 0) {
-					port = options.sysLog.port;
+
+				let type = "BSD";
+				if (typeof options.sysLog.protocol === "string") {
+					switch (options.sysLog.protocol.toLowerCase()) {
+						case "bsd":
+						case "3164":
+						case "rfc3164":
+							break;
+
+						case "5424":
+						case "rfc5424":
+							type = "5424";
+							break;
+
+						default:
+							reject(new Error("Logger: Invalid syslog protocol option."));
+							return;
+					}
 				}
-			}
-			else if (options.sysLog.port != null) {
-				reject(new Error("Logger: Invalid syslog port option."));
-				return;
-			}
-
-			let type = "BSD";
-			if (typeof options.sysLog.protocol === "string") {
-				switch (options.sysLog.protocol.toLowerCase()) {
-					case "bsd":
-					case "3164":
-					case "rfc3164":
-						break;
-
-					case "5424":
-					case "rfc5424":
-						type = "5424";
-						break;
-
-					default:
-						reject(new Error("Logger: Invalid syslog protocol option."));
-						return;
+				else if (typeof options.sysLog.protocol !== null) {
+					reject(new Error("Logger: Invalid syslog protocol option."));
+					return;
 				}
-			}
-			else if (typeof options.sysLog.protocol !== null) {
-				reject(new Error("Logger: Invalid syslog protocol option."));
-				return;
+
+				syslogTransport = new WinstonSyslog.Syslog({
+					host,
+					port,
+					protocol,
+					facility: "user",
+					type,
+					app_name: options.appName,
+					format: winston.format.combine(
+						winston.format.timestamp({
+							format: "YYYY-MM-DD HH:mm:ss"
+						}),
+						formattedOutputWithoutDate
+					),
+					...(protocol != "udp" && { eol: os.EOL })
+				});
+				transports.push(syslogTransport);
+
+				syslogSendInfoNotifications = Boolean(options.sysLog.sendInfoNotifications);
 			}
 
-			syslogTransport = new WinstonSyslog.Syslog({
-				host,
-				port,
-				protocol,
-				facility: "user",
-				type,
-				app_name: options.appName,
-				format: winston.format.combine(
-					winston.format.timestamp({
-						format: "YYYY-MM-DD HH:mm:ss"
-					}),
-					formattedOutputWithoutDate
-				),
-				...(protocol != "udp" && { eol: os.EOL })
-			});
-			transports.push(syslogTransport);
+			// And create the logger
+			if (transports.length > 0) {
+				logger = winston.createLogger({
+					level: "debug",
+					transports
+				});
+				logger.exitOnError = false;
+			}
 
-			syslogSendInfoNotifications = Boolean(options.sysLog.sendInfoNotifications);
+			// At last, if running in a cluster, set up the message listener
+			if (cluster) {
+				cluster.on("message", (worker: Worker, message: any): void => {
+					if (message.type === LOG_REQUEST) {
+						notify(message.level as level, message.message as string, message.options as LogNotifyOptions);
+					}
+				});
+			}
 		}
-
-		//andd create the logger
-		if (transports.length > 0) {
-			logger = winston.createLogger({
-				level: "debug",
-				transports
-			});
-			logger.exitOnError = false;
+		else {
+			// I'm a worker
+			actingAsWorker = true;
 		}
 
 		//done
@@ -274,6 +303,8 @@ export function finalize(): Promise<void> {
 				consoleTransport = null;
 				fileTransport = null;
 				syslogTransport = null;
+				cluster = null;
+				actingAsWorker = false;
 
 				process.nextTick(() => {
 					resolve();
@@ -310,6 +341,9 @@ export function finalize(): Promise<void> {
 			}
 		}
 		else {
+			cluster = null;
+			actingAsWorker = false;
+
 			resolve();
 		}
 	});
@@ -322,43 +356,53 @@ export function setDebugLevel(newLevel: number): void {
 }
 
 export function notify(type: level, message: string, options?: LogNotifyOptions): void {
-	let silentConsole;
+	if (!actingAsWorker) {
+		let silentConsole;
 
-	if (type == "error") {
-		silentConsole = updateSilentSettings(options, false);
-		if (logger) {
-			logger.error(message);
+		if (type == "error") {
+			silentConsole = updateSilentSettings(options, false);
+			if (logger) {
+				logger.error(message);
+			}
+			else if (!silentConsole) {
+				console.log("[ERROR] " + message);
+			}
 		}
-		else if (!silentConsole) {
-			console.log("[ERROR] " + message);
+		else if (type == "warn") {
+			silentConsole = updateSilentSettings(options, false);
+			if (logger) {
+				logger.warn(message);
+			}
+			else if (!silentConsole) {
+				console.log("[WARN] " + message);
+			}
+		}
+		else if (type == "info") {
+			silentConsole = updateSilentSettings(options, !syslogSendInfoNotifications);
+			if (logger) {
+				logger.info(message);
+			}
+			else if (!silentConsole) {
+				console.log("[INFO] " + message);
+			}
+		}
+		else if (type == "debug") {
+			silentConsole = updateSilentSettings(options, true);
+			if (logger) {
+				logger.debug(message);
+			}
+			else if (!silentConsole) {
+				console.log("[DEBUG] " + message);
+			}
 		}
 	}
-	else if (type == "warn") {
-		silentConsole = updateSilentSettings(options, false);
-		if (logger) {
-			logger.warn(message);
-		}
-		else if (!silentConsole) {
-			console.log("[WARN] " + message);
-		}
-	}
-	else if (type == "info") {
-		silentConsole = updateSilentSettings(options, !syslogSendInfoNotifications);
-		if (logger) {
-			logger.info(message);
-		}
-		else if (!silentConsole) {
-			console.log("[INFO] " + message);
-		}
-	}
-	else if (type == "debug") {
-		silentConsole = updateSilentSettings(options, true);
-		if (logger) {
-			logger.debug(message);
-		}
-		else if (!silentConsole) {
-			console.log("[DEBUG] " + message);
-		}
+	else {
+		process.send!({
+			type: LOG_REQUEST,
+			level: type,
+			message,
+			options: (options) ? options : {}
+		});
 	}
 }
 
